@@ -13,11 +13,31 @@ function init() {
                 const taskId = localStorage.getItem("txt2img_task_id");
                 if (lastTaskId == taskId)
                     continue;
-                send(taskId);
+                send(JSON.stringify({
+                    'type': 'progress',
+                    'data': taskId
+                }));
             }
         }
     });
     observer.observe(gradioApp().getElementById('txt2img_results'), { childList: true });
+}
+
+function putResult(id) {
+    fetch('/intersync/result/' + id)
+        .then(response => response.json())
+        .then(json => {
+/*            {
+                images: [imgToB64(img) for img in data[0]],
+                generation_info: data[1],
+                html_info: data[2],
+                html_log: data[3]
+            }*/
+            const img = document.createElement('img');
+            img.src = json.images[0];
+            gradioApp().appendChild(img);
+        })
+        .catch(err => console.error(err));
 }
 
 function initSocket() {
@@ -27,16 +47,22 @@ function initSocket() {
     };
 
     socket.onmessage = e => {
-        const id = e.data;
-        lastTaskId = id;
-        rememberGallerySelection('txt2img_gallery');
-        showSubmitButtons('txt2img', false);
-        localStorage.setItem("txt2img_task_id", id);
-        requestProgress(id, gradioApp().getElementById('txt2img_gallery_container'), gradioApp().getElementById('txt2img_gallery'), function(){
-            showSubmitButtons('txt2img', true);
-            localStorage.removeItem("txt2img_task_id");
-            showRestoreProgressButton('txt2img', false);
-        });
+        const msg = JSON.parse(e.data);
+        switch (msg.type) {
+        case 'progress':
+            const id = msg.data;
+            lastTaskId = id;
+            rememberGallerySelection('txt2img_gallery');
+            showSubmitButtons('txt2img', false);
+            localStorage.setItem("txt2img_task_id", id);
+            requestProgress(id, gradioApp().getElementById('txt2img_gallery_container'), gradioApp().getElementById('txt2img_gallery'), function(){
+                showSubmitButtons('txt2img', true);
+                localStorage.removeItem("txt2img_task_id");
+                showRestoreProgressButton('txt2img', false);
+                putResult(id);
+            });
+            break;
+        }
     };
 
     socket.onclose = e => {
@@ -56,4 +82,4 @@ function initSocket() {
     };
 }
 
-window.addEventListener('load', init);
+onUiLoaded(init);
